@@ -10,9 +10,14 @@ export default function AddressAutocomplete({
   disabled = false,
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
+  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const [inputValue, setInputValue] = useState(defaultValue);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   // Parse address components from Place result
   const parseAddressComponents = useCallback(
@@ -60,54 +65,111 @@ export default function AddressAutocomplete({
     []
   );
 
-  // Initialize autocomplete when Google Maps is loaded
+  // Initialize services when Google Maps is loaded
   useEffect(() => {
-    const initAutocomplete = () => {
-      if (!inputRef.current || !window.google?.maps?.places) return;
+    const initServices = () => {
+      if (!window.google?.maps?.places) return;
 
-      autocompleteRef.current = new google.maps.places.Autocomplete(
-        inputRef.current,
-        {
-          types: ['address'],
-          componentRestrictions: { country: 'us' },
-          fields: [
-            'address_components',
-            'formatted_address',
-            'geometry',
-            'place_id',
-          ],
-        }
-      );
+      autocompleteServiceRef.current = new google.maps.places.AutocompleteService();
 
-      autocompleteRef.current.addListener('place_changed', () => {
-        const place = autocompleteRef.current?.getPlace();
-        if (place) {
-          const location = parseAddressComponents(place);
-          if (location) {
-            setInputValue(place.formatted_address || '');
-            onSelect(location);
-          }
-        }
-      });
+      // Create a dummy div for PlacesService (required by the API)
+      const dummyDiv = document.createElement('div');
+      placesServiceRef.current = new google.maps.places.PlacesService(dummyDiv);
 
       setIsLoaded(true);
     };
 
-    // Check if Google Maps is already loaded
     if (window.google?.maps?.places) {
-      initAutocomplete();
+      initServices();
     } else {
-      // Wait for the script to load
       const checkGoogle = setInterval(() => {
         if (window.google?.maps?.places) {
           clearInterval(checkGoogle);
-          initAutocomplete();
+          initServices();
         }
       }, 100);
 
       return () => clearInterval(checkGoogle);
     }
-  }, [onSelect, parseAddressComponents]);
+  }, []);
+
+  // Debounced search for predictions
+  const searchPredictions = useCallback((input: string) => {
+    if (!autocompleteServiceRef.current || input.length < 3) {
+      setPredictions([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Debounce: wait 300ms after user stops typing
+    debounceTimerRef.current = setTimeout(() => {
+      autocompleteServiceRef.current?.getPlacePredictions(
+        {
+          input,
+          types: ['address'],
+          componentRestrictions: { country: 'us' },
+        },
+        (results, status) => {
+          if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+            setPredictions(results);
+            setShowDropdown(true);
+          } else {
+            setPredictions([]);
+            setShowDropdown(false);
+          }
+        }
+      );
+    }, 300);
+  }, []);
+
+  // Handle input change
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputValue(value);
+    searchPredictions(value);
+  };
+
+  // Handle prediction selection
+  const handleSelectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
+    if (!placesServiceRef.current) return;
+
+    setInputValue(prediction.description);
+    setShowDropdown(false);
+    setPredictions([]);
+
+    // Get full place details
+    placesServiceRef.current.getDetails(
+      {
+        placeId: prediction.place_id,
+        fields: ['address_components', 'formatted_address', 'geometry', 'place_id'],
+      },
+      (place, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+          const location = parseAddressComponents(place);
+          if (location) {
+            onSelect(location);
+          }
+        }
+      }
+    );
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (inputRef.current && !inputRef.current.parentElement?.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   return (
     <div className="relative">
@@ -115,7 +177,8 @@ export default function AddressAutocomplete({
         ref={inputRef}
         type="text"
         value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
+        onChange={handleInputChange}
+        onFocus={() => predictions.length > 0 && setShowDropdown(true)}
         placeholder={placeholder}
         disabled={disabled || !isLoaded}
         className="w-full px-4 py-3 text-lg border-2 border-slate-200 rounded-lg
@@ -129,6 +192,21 @@ export default function AddressAutocomplete({
         <div className="absolute right-3 top-1/2 -translate-y-1/2">
           <div className="w-5 h-5 border-2 border-slate-300 border-t-emerald-500 rounded-full animate-spin" />
         </div>
+      )}
+
+      {/* Predictions dropdown */}
+      {showDropdown && predictions.length > 0 && (
+        <ul className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+          {predictions.map((prediction) => (
+            <li
+              key={prediction.place_id}
+              onClick={() => handleSelectPrediction(prediction)}
+              className="px-4 py-3 cursor-pointer hover:bg-slate-50 border-b border-slate-100 last:border-b-0"
+            >
+              <span className="text-slate-700">{prediction.description}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

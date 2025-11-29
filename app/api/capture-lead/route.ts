@@ -95,6 +95,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CaptureLe
       costPremiumLow: existingReport.cost_premium_low,
       costPremiumHigh: existingReport.cost_premium_high,
       staticMapUrl: existingReport.static_map_url,
+      solarRawJson: existingReport.solar_raw_json,
       leadCaptured: true,
       leadName: name.trim(),
       leadEmail: email.toLowerCase().trim(),

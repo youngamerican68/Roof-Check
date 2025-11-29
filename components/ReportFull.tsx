@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { RoofReport, RoofInsight } from '@/types';
 import SatelliteImage from './SatelliteImage';
+import RoofSegmentSummary from './RoofSegmentSummary';
 import CostEstimateDisplay from './CostEstimateDisplay';
 import ContactForm from './ContactForm';
 import {
@@ -123,6 +124,16 @@ export default function ReportFull({ report }: ReportFullProps) {
         </div>
       )}
 
+      {/* Roof Section Breakdown */}
+      {report.solarRawJson?.solarPotential?.roofSegmentStats && (
+        <section>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">
+            Roof Section Breakdown
+          </h2>
+          <RoofSegmentSummary solarData={report.solarRawJson} />
+        </section>
+      )}
+
       {/* Roof Size & Geometry */}
       {hasMetrics && (
         <section>
@@ -203,6 +214,7 @@ export default function ReportFull({ report }: ReportFullProps) {
           />
         </section>
       )}
+
 
       {/* Roof Insights */}
       {insights.length > 0 && (

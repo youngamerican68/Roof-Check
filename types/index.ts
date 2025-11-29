@@ -152,6 +152,7 @@ export interface RoofReport {
 
   // Assets
   staticMapUrl: string | null;
+  solarRawJson: SolarBuildingInsights | null;
 
   // Lead info
   leadCaptured: boolean;

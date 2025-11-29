@@ -68,6 +68,7 @@ export default function ReportPage() {
         costPremiumLow: data.cost_premium_low,
         costPremiumHigh: data.cost_premium_high,
         staticMapUrl: data.static_map_url,
+        solarRawJson: data.solar_raw_json,
         leadCaptured: data.lead_captured,
         leadName: data.lead_name,
         leadEmail: data.lead_email,

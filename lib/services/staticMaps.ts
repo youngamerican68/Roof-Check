@@ -37,10 +37,17 @@ export function buildStaticMapUrl(options: StaticMapOptions): string {
     zoom: zoom.toString(),
     size: `${width}x${height}`,
     maptype: mapType,
-    markers: `color:${markerColor}|${lat},${lng}`,
     scale: scale.toString(),
     key: apiKey,
   });
+
+  // Only add marker if color is specified (allows opting out)
+  if (markerColor === 'small') {
+    // Small dot marker - less obtrusive
+    params.set('markers', `size:tiny|color:red|${lat},${lng}`);
+  } else if (markerColor) {
+    params.set('markers', `color:${markerColor}|${lat},${lng}`);
+  }
 
   return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
 }
@@ -75,11 +82,11 @@ export function buildReportMapUrl(lat: number, lng: number): string {
   return buildStaticMapUrl({
     lat,
     lng,
-    zoom: 20,
+    zoom: 20, // Closer view of the property
     width: 640,
     height: 480,
     mapType: 'satellite',
-    markerColor: 'red',
+    markerColor: 'small', // Tiny marker - identifies house without obscuring roof
     scale: 2,
   });
 }
