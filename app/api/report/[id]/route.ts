@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db, roofReports } from '@/lib/db';
 
+// Disable caching for this route
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }

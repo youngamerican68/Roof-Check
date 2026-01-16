@@ -4,6 +4,10 @@ import { eq } from 'drizzle-orm';
 import { db, roofReports } from '@/lib/db';
 import type { CaptureLeadResponse } from '@/types';
 
+// Disable caching for this route
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // Request validation schema
 const captureLeadSchema = z.object({
   reportId: z.string().uuid(),

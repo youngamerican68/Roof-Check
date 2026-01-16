@@ -6,6 +6,10 @@ import { analyzeFromSolarData, generateFallbackMetrics } from '@/lib/services/ro
 import { buildReportMapUrl } from '@/lib/services/staticMaps';
 import type { AnalyzeResponse } from '@/types';
 
+// Disable caching for this route
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // Request validation schema
 const analyzeSchema = z.object({
   lat: z.number().min(-90).max(90),
