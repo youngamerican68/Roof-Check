@@ -72,15 +72,56 @@ export const revalidate = 0;
 
 ## Current Deployment Status
 
-**Status:** API keys restricted to localhost only (as of January 16, 2026)
+**Status:** DEVELOPMENT MODE - API keys restricted to localhost only
 
-The Google API key has been restricted in Google Cloud Console to only accept requests from `http://localhost/*`. This prevents unexpected API charges from the public Vercel deployment.
+The Google API key is currently restricted to only work from `http://localhost/*`. The public Vercel site is deployed but APIs are blocked to prevent charges.
 
-**To re-enable for production:**
-1. Go to [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials)
+---
+
+## 🚀 Going Live Checklist
+
+When you're ready to launch the production site, follow these steps:
+
+### Step 1: Enable Google API for Production (Required)
+1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
+2. Click on your API key to edit it
+3. Under **"Website restrictions"**, click **"+ Add"**
+4. Add: `https://roofcheck-nine.vercel.app/*`
+5. Click **"Save"**
+6. Wait 5 minutes for changes to propagate
+
+### Step 2: Verify Environment Variables on Vercel
+Run this command to confirm all env vars are set:
+```bash
+cd "/Users/paulsowell/Roof Check/roofcheck" && vercel env ls production
+```
+
+Required variables:
+- [ ] `DATABASE_URL` - Neon PostgreSQL connection string
+- [ ] `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` - Google Maps/Places API key
+- [ ] `GOOGLE_SOLAR_API_KEY` - Google Solar API key
+- [ ] `NEXT_PUBLIC_APP_URL` - Should be `https://roofcheck-nine.vercel.app`
+
+### Step 3: Test Production Site
+1. Go to https://roofcheck-nine.vercel.app
+2. Enter a test address
+3. Verify autocomplete works
+4. Complete the full flow through lead capture
+
+### Step 4: Set Up Billing Alerts (Recommended)
+1. Go to [Google Cloud Console → Billing → Budgets & Alerts](https://console.cloud.google.com/billing)
+2. Create a budget alert (e.g., $50/month)
+3. Set email notifications at 50%, 90%, 100% thresholds
+
+---
+
+## To Disable Production Again
+
+If you need to disable the public site:
+1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
 2. Edit the API key
-3. Under "Website restrictions", add: `https://roofcheck-nine.vercel.app/*`
-4. Save (takes up to 5 minutes to take effect)
+3. Remove `https://roofcheck-nine.vercel.app/*` from website restrictions
+4. Save
 
 ---
 
