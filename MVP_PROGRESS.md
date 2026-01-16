@@ -70,6 +70,20 @@ export const revalidate = 0;
 
 ---
 
+## Current Deployment Status
+
+**Status:** API keys restricted to localhost only (as of January 16, 2026)
+
+The Google API key has been restricted in Google Cloud Console to only accept requests from `http://localhost/*`. This prevents unexpected API charges from the public Vercel deployment.
+
+**To re-enable for production:**
+1. Go to [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials)
+2. Edit the API key
+3. Under "Website restrictions", add: `https://roofcheck-nine.vercel.app/*`
+4. Save (takes up to 5 minutes to take effect)
+
+---
+
 ## Environment Variables Required
 
 ```
