@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { db, roofReports } from '@/lib/db';
 import { fetchBuildingInsights, hasDetailedSegmentData } from '@/lib/services/solarApi';
 import { analyzeFromSolarData, generateFallbackMetrics } from '@/lib/services/roofAnalysis';
 import { buildReportMapUrl } from '@/lib/services/staticMaps';
-import type { AnalyzeRequest, AnalyzeResponse } from '@/types';
+import type { AnalyzeResponse } from '@/types';
 
 // Request validation schema
 const analyzeSchema = z.object({
@@ -15,13 +15,13 @@ const analyzeSchema = z.object({
   city: z.string().min(1),
   state: z.string().min(1),
   postalCode: z.string().min(1),
-  accessCode: z.string().optional(),
+  placeId: z.string().optional(),
 });
 
 export async function POST(request: NextRequest): Promise<NextResponse<AnalyzeResponse>> {
   try {
     // Parse and validate request body
-    const body: AnalyzeRequest = await request.json();
+    const body = await request.json();
     const validatedData = analyzeSchema.parse(body);
 
     const {
@@ -32,83 +32,77 @@ export async function POST(request: NextRequest): Promise<NextResponse<AnalyzeRe
       city,
       state,
       postalCode,
-      accessCode,
+      placeId,
     } = validatedData;
-
-    const supabase = getSupabaseServerClient();
-
-    // Look up access code campaign if provided
-    let accessCodeId: string | null = null;
-    if (accessCode) {
-      const { data: campaign } = await supabase
-        .from('access_code_campaigns')
-        .select('id')
-        .eq('code', accessCode.toUpperCase())
-        .eq('is_active', true)
-        .single();
-
-      if (campaign) {
-        accessCodeId = campaign.id;
-      }
-      // If code is invalid, we still proceed - just don't link to a campaign
-    }
 
     // Fetch roof data from Solar API
     const solarResult = await fetchBuildingInsights(lat, lng);
 
     let metrics;
-    let solarRawJson = null;
-    let hasSolarData = false;
+    let confidenceScore: 'high' | 'medium' | 'low' = 'low';
+    let imageryDate: string | null = null;
 
     if (solarResult.success && solarResult.data) {
       // Use Solar API data
       metrics = analyzeFromSolarData(solarResult.data);
-      solarRawJson = solarResult.data;
-      hasSolarData = hasDetailedSegmentData(solarResult.data);
+
+      // Determine confidence based on data quality
+      if (hasDetailedSegmentData(solarResult.data)) {
+        confidenceScore = 'high';
+      } else if (solarResult.data.solarPotential?.wholeRoofStats) {
+        confidenceScore = 'medium';
+      }
+
+      // Extract imagery date
+      if (solarResult.data.imageryDate) {
+        const { year, month, day } = solarResult.data.imageryDate;
+        imageryDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
     } else {
       // Fall back to heuristic estimation
       console.log('Solar API unavailable, using fallback:', solarResult.error);
       metrics = generateFallbackMetrics();
+      confidenceScore = 'low';
     }
 
     // Generate static map URL
     const staticMapUrl = buildReportMapUrl(lat, lng);
 
-    // Create report record in database
-    const { data: report, error: insertError } = await supabase
-      .from('roof_reports')
-      .insert({
-        access_code_id: accessCodeId,
-        address_line1: addressLine1,
+    // Create report record in database using Drizzle
+    const [report] = await db
+      .insert(roofReports)
+      .values({
+        placeId: placeId || null,
+        addressLine1,
         city,
         state,
-        postal_code: postalCode,
-        full_address: fullAddress,
-        lat,
-        lng,
-        estimation_source: metrics.estimationSource,
-        roof_area_sqft_low: metrics.roofAreaSqFtLow,
-        roof_area_sqft_high: metrics.roofAreaSqFtHigh,
-        roof_squares_low: metrics.roofSquaresLow,
-        roof_squares_high: metrics.roofSquaresHigh,
+        postalCode,
+        fullAddress,
+        lat: String(lat),
+        lng: String(lng),
+        estimationSource: metrics.estimationSource,
+        roofAreaSqftLow: String(metrics.roofAreaSqFtLow),
+        roofAreaSqftHigh: String(metrics.roofAreaSqFtHigh),
+        roofSquaresLow: String(metrics.roofSquaresLow),
+        roofSquaresHigh: String(metrics.roofSquaresHigh),
         complexity: metrics.complexity,
-        pitch_degrees: metrics.pitchDegrees,
-        azimuth_primary: metrics.azimuthPrimary,
-        sunshine_hours_annual: metrics.sunshineHoursAnnual,
-        cost_economy_low: metrics.costEconomy.low,
-        cost_economy_high: metrics.costEconomy.high,
-        cost_standard_low: metrics.costStandard.low,
-        cost_standard_high: metrics.costStandard.high,
-        cost_premium_low: metrics.costPremium.low,
-        cost_premium_high: metrics.costPremium.high,
-        static_map_url: staticMapUrl,
-        solar_raw_json: solarRawJson,
+        pitchDegrees: metrics.pitchDegrees != null && !isNaN(metrics.pitchDegrees) ? String(metrics.pitchDegrees) : null,
+        azimuthPrimary: metrics.azimuthPrimary || null,
+        sunshineHoursAnnual: metrics.sunshineHoursAnnual ? String(metrics.sunshineHoursAnnual) : null,
+        costEconomyLow: String(metrics.costEconomy.low),
+        costEconomyHigh: String(metrics.costEconomy.high),
+        costStandardLow: String(metrics.costStandard.low),
+        costStandardHigh: String(metrics.costStandard.high),
+        costPremiumLow: String(metrics.costPremium.low),
+        costPremiumHigh: String(metrics.costPremium.high),
+        staticMapUrl,
+        confidenceScore,
+        imageryDate,
       })
-      .select('id')
-      .single();
+      .returning({ id: roofReports.id });
 
-    if (insertError || !report) {
-      console.error('Failed to create report:', insertError);
+    if (!report) {
+      console.error('Failed to create report');
       return NextResponse.json(
         { success: false, error: 'Failed to create report' },
         { status: 500 }

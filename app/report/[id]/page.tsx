@@ -5,7 +5,6 @@ import { useEffect, useState, useCallback } from 'react';
 import ReportPreview from '@/components/ReportPreview';
 import ReportFull from '@/components/ReportFull';
 import type { RoofReport } from '@/types';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export default function ReportPage() {
   const params = useParams();
@@ -16,7 +15,7 @@ export default function ReportPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch report data
+  // Fetch report data from API
   const fetchReport = useCallback(async () => {
     if (!reportId) {
       setError('No report ID provided');
@@ -25,57 +24,53 @@ export default function ReportPage() {
     }
 
     try {
-      const supabase = getSupabaseBrowserClient();
+      const response = await fetch(`/api/report/${reportId}`);
 
-      const { data, error: fetchError } = await supabase
-        .from('roof_reports')
-        .select('*')
-        .eq('id', reportId)
-        .single();
-
-      if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
+      if (!response.ok) {
+        if (response.status === 404) {
           setError('Report not found');
         } else {
-          throw fetchError;
+          throw new Error('Failed to fetch report');
         }
         return;
       }
 
-      // Transform database record to RoofReport type
+      const data = await response.json();
+
+      // Transform API response to RoofReport type (convert string numbers to actual numbers)
       const transformedReport: RoofReport = {
         id: data.id,
-        addressLine1: data.address_line1,
+        addressLine1: data.addressLine1,
         city: data.city,
         state: data.state,
-        postalCode: data.postal_code,
-        fullAddress: data.full_address,
+        postalCode: data.postalCode,
+        fullAddress: data.fullAddress,
         lat: Number(data.lat),
         lng: Number(data.lng),
-        estimationSource: data.estimation_source,
-        roofAreaSqFtLow: data.roof_area_sqft_low,
-        roofAreaSqFtHigh: data.roof_area_sqft_high,
-        roofSquaresLow: data.roof_squares_low,
-        roofSquaresHigh: data.roof_squares_high,
+        estimationSource: data.estimationSource,
+        roofAreaSqFtLow: Number(data.roofAreaSqFtLow),
+        roofAreaSqFtHigh: Number(data.roofAreaSqFtHigh),
+        roofSquaresLow: Number(data.roofSquaresLow),
+        roofSquaresHigh: Number(data.roofSquaresHigh),
         complexity: data.complexity,
-        pitchDegrees: data.pitch_degrees,
-        azimuthPrimary: data.azimuth_primary,
-        sunshineHoursAnnual: data.sunshine_hours_annual,
-        costEconomyLow: data.cost_economy_low,
-        costEconomyHigh: data.cost_economy_high,
-        costStandardLow: data.cost_standard_low,
-        costStandardHigh: data.cost_standard_high,
-        costPremiumLow: data.cost_premium_low,
-        costPremiumHigh: data.cost_premium_high,
-        staticMapUrl: data.static_map_url,
-        solarRawJson: data.solar_raw_json,
-        leadCaptured: data.lead_captured,
-        leadName: data.lead_name,
-        leadEmail: data.lead_email,
-        leadPhone: data.lead_phone,
-        leadCapturedAt: data.lead_captured_at,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
+        pitchDegrees: data.pitchDegrees ? Number(data.pitchDegrees) : null,
+        azimuthPrimary: data.azimuthPrimary,
+        sunshineHoursAnnual: data.sunshineHoursAnnual ? Number(data.sunshineHoursAnnual) : null,
+        costEconomyLow: Number(data.costEconomyLow),
+        costEconomyHigh: Number(data.costEconomyHigh),
+        costStandardLow: Number(data.costStandardLow),
+        costStandardHigh: Number(data.costStandardHigh),
+        costPremiumLow: Number(data.costPremiumLow),
+        costPremiumHigh: Number(data.costPremiumHigh),
+        staticMapUrl: data.staticMapUrl,
+        solarRawJson: data.solarRawJson,
+        leadCaptured: data.leadCaptured,
+        leadName: data.leadName,
+        leadEmail: data.leadEmail,
+        leadPhone: data.leadPhone,
+        leadCapturedAt: data.leadCapturedAt,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
       };
 
       setReport(transformedReport);

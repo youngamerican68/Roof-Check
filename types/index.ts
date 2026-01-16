@@ -245,3 +245,211 @@ export interface CostEstimateDisplayProps {
   premium: CostRange;
   isBlurred?: boolean;
 }
+
+// ============================================
+// Multi-Tenant Types (SaaS)
+// ============================================
+
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete';
+export type PipelineStatus = 'new' | 'contacted' | 'quoted' | 'booked' | 'won' | 'lost';
+export type ConsentType = 'contact' | 'sms' | 'email' | 'marketing';
+export type ConfidenceScore = 'high' | 'medium' | 'low';
+export type UsageEventType = 'report' | 'geocode' | 'map_tile';
+
+export interface Roofer {
+  id: string;
+  authUserId: string;
+  email: string;
+
+  // Branding
+  companyName: string;
+  logoUrl: string | null;
+  primaryColor: string;
+
+  // Contact & notifications
+  notificationEmail: string;
+  notificationEmailsAdditional: string[];
+  schedulingUrl: string | null;
+
+  // Widget configuration
+  allowedDomains: string[];
+  ctaHeadline: string;
+  ctaButtonText: string;
+
+  // Optional modules
+  showPitch: boolean;
+  showCostEstimates: boolean;
+  costPerSquare: number | null;
+
+  // Subscription
+  subscriptionStatus: SubscriptionStatus;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  monthlyReportQuota: number;
+
+  // API access
+  apiKey: string;
+  apiKeyCreatedAt: string;
+
+  // Domain verification
+  domainVerificationToken: string;
+
+  // Timestamps
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Lead {
+  id: string;
+  rooferId: string;
+  reportId: string;
+  campaignId: string | null;
+
+  // Contact info (encrypted at rest, decrypted in app)
+  name: string;
+  email: string;
+  phone: string;
+
+  // Pipeline
+  pipelineStatus: PipelineStatus;
+
+  // Timestamps
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UsageEvent {
+  id: string;
+  rooferId: string;
+  reportId: string | null;
+  eventType: UsageEventType;
+  costCents: number;
+  provider: string | null;
+  createdAt: string;
+}
+
+export interface ConsentAuditLog {
+  id: string;
+  leadId: string;
+  consentType: ConsentType;
+  consentText: string;
+  consentGiven: boolean;
+  ipAddress: string | null;
+  userAgent: string | null;
+  formVersion: string;
+  createdAt: string;
+}
+
+export interface AddressCache {
+  id: string;
+  placeId: string;
+  normalizedAddress: string | null;
+  providerSource: string;
+  derivedMetrics: Record<string, unknown>;
+  confidenceScore: ConfidenceScore | null;
+  imageryDate: string | null;
+  cachedAt: string;
+  expiresAt: string;
+  hitCount: number;
+}
+
+export interface Campaign {
+  id: string;
+  rooferId: string | null;
+  code: string;
+  campaignToken: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================
+// Dashboard API Types
+// ============================================
+
+export interface RooferDashboardStats {
+  totalReports: number;
+  totalLeads: number;
+  conversionRate: number;
+  quotaUsed: number;
+  quotaLimit: number;
+  recentLeads: Lead[];
+  campaignPerformance: CampaignPerformance[];
+}
+
+export interface CampaignPerformance {
+  campaignId: string;
+  campaignName: string;
+  reportCount: number;
+  leadCount: number;
+  conversionRate: number;
+}
+
+export interface RooferSettings {
+  companyName: string;
+  logoUrl: string | null;
+  primaryColor: string;
+  notificationEmail: string;
+  notificationEmailsAdditional: string[];
+  schedulingUrl: string | null;
+  allowedDomains: string[];
+  ctaHeadline: string;
+  ctaButtonText: string;
+  showPitch: boolean;
+  showCostEstimates: boolean;
+  costPerSquare: number | null;
+}
+
+// ============================================
+// Auth Types
+// ============================================
+
+export interface RooferSignupRequest {
+  email: string;
+  password: string;
+  companyName: string;
+}
+
+export interface RooferLoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  error?: string;
+  roofer?: Roofer;
+}
+
+// ============================================
+// Widget/Embed Types
+// ============================================
+
+export interface EmbedConfig {
+  rooferKey: string;
+  companyName: string;
+  logoUrl: string | null;
+  primaryColor: string;
+  ctaHeadline: string;
+  ctaButtonText: string;
+  showPitch: boolean;
+  showCostEstimates: boolean;
+}
+
+export interface EmbedTokenPayload {
+  rooferId: string;
+  domain: string;
+  nonce: string;
+  exp: number;
+}
+
+export interface CampaignTokenPayload {
+  rooferId: string;
+  campaignId: string;
+  nonce: string;
+  exp: number;
+}
