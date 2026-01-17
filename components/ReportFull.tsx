@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { RoofReport, RoofInsight } from '@/types';
 import SatelliteImage from './SatelliteImage';
 import RoofSegmentSummary from './RoofSegmentSummary';
@@ -15,9 +15,71 @@ import {
   getComplexityDescription,
 } from '@/lib/services/roofAnalysis';
 import { ROOFER_QUESTIONS } from '@/lib/utils/constants';
+import { trackReportUnlocked } from '@/lib/utils/analytics';
 
 interface ReportFullProps {
   report: RoofReport;
+}
+
+// Feature flag - set to true when contractor scheduling goes live
+const SCHEDULING_LIVE = false;
+
+// Check if address is in Bucks County, PA (pilot area)
+function isInBucksCounty(report: RoofReport): boolean {
+  const state = report.state?.toUpperCase();
+  const fullAddress = report.fullAddress?.toLowerCase() || '';
+
+  // Check if PA and address contains "bucks" (for Bucks County)
+  // This is a simple heuristic - in production you'd use proper geocoding
+  if (state === 'PA' && fullAddress.includes('bucks')) {
+    return true;
+  }
+
+  // Also check common Bucks County cities/towns
+  const bucksCountyTowns = [
+    'doylestown', 'newtown', 'yardley', 'morrisville', 'langhorne',
+    'levittown', 'bensalem', 'bristol', 'quakertown', 'perkasie',
+    'sellersville', 'chalfont', 'warrington', 'warminster', 'ivyland',
+    'new hope', 'lambertville', 'richboro', 'southampton', 'feasterville'
+  ];
+
+  if (state === 'PA') {
+    return bucksCountyTowns.some(town => fullAddress.includes(town));
+  }
+
+  return false;
+}
+
+// Confidence messaging
+function getConfidenceInfo(score: string | null): {
+  label: string;
+  color: string;
+  bgColor: string;
+  detail?: string;
+} {
+  switch (score) {
+    case 'high':
+      return {
+        label: 'Data Confidence: Good',
+        color: 'text-emerald-600',
+        bgColor: 'bg-emerald-50',
+      };
+    case 'medium':
+      return {
+        label: 'Data Confidence: Moderate',
+        color: 'text-amber-600',
+        bgColor: 'bg-amber-50',
+        detail: 'Some roof edges were partially obscured in aerial imagery. Measurements may vary slightly from actual dimensions.',
+      };
+    case 'low':
+    default:
+      return {
+        label: 'Data Confidence: Limited',
+        color: 'text-amber-600',
+        bgColor: 'bg-amber-50',
+        detail: 'We couldn\'t extract full roof edges from current aerial imagery at this address. Your roof area range is estimated using your home footprint and typical roof-to-home ratios for similar properties. For exact measurements, a roofer\'s on-site measurement is recommended.',
+      };
+  }
 }
 
 export default function ReportFull({ report }: ReportFullProps) {
@@ -25,10 +87,12 @@ export default function ReportFull({ report }: ReportFullProps) {
   const [showConfetti, setShowConfetti] = useState(true);
 
   const hasMetrics = report.roofSquaresLow && report.roofSquaresHigh;
-  const partnerName = process.env.NEXT_PUBLIC_PARTNER_NAME || 'our roofing partner';
+  const confidenceInfo = getConfidenceInfo(report.confidenceScore);
+  const inBucks = isInBucksCounty(report);
+  const schedulingLive = SCHEDULING_LIVE;
 
-  // Generate insights from metrics
-  const insights: RoofInsight[] = hasMetrics ? generateInsights(
+  // Generate insights from metrics (filter out "Data Availability" since it's shown in confidence block)
+  const allInsights: RoofInsight[] = hasMetrics ? generateInsights(
     {
       roofAreaSqFtLow: report.roofAreaSqFtLow!,
       roofAreaSqFtHigh: report.roofAreaSqFtHigh!,
@@ -38,7 +102,7 @@ export default function ReportFull({ report }: ReportFullProps) {
       pitchDegrees: report.pitchDegrees,
       azimuthPrimary: report.azimuthPrimary as any,
       sunshineHoursAnnual: report.sunshineHoursAnnual,
-      segmentCount: 0, // Not stored in DB, but that's okay
+      segmentCount: 0,
       costEconomy: { low: report.costEconomyLow!, high: report.costEconomyHigh! },
       costStandard: { low: report.costStandardLow!, high: report.costStandardHigh! },
       costPremium: { low: report.costPremiumLow!, high: report.costPremiumHigh! },
@@ -46,6 +110,9 @@ export default function ReportFull({ report }: ReportFullProps) {
     },
     report.estimationSource === 'solar_api'
   ) : [];
+
+  // Filter out Data Availability insight - we show that in the dedicated confidence block
+  const insights = allInsights.filter(insight => insight.title !== 'Data Availability');
 
   // Replace placeholder in questions
   const squaresRange = hasMetrics
@@ -57,7 +124,61 @@ export default function ReportFull({ report }: ReportFullProps) {
   );
 
   // Hide confetti after animation
-  setTimeout(() => setShowConfetti(false), 3000);
+  useEffect(() => {
+    const timer = setTimeout(() => setShowConfetti(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Track report unlocked event
+  useEffect(() => {
+    trackReportUnlocked(report.id);
+  }, [report.id]);
+
+  // CTA content based on location and scheduling status
+  const getCTAContent = () => {
+    if (inBucks && schedulingLive) {
+      // Variant 1: In Bucks County AND scheduling is live
+      return {
+        title: 'Ready for an On-Site Inspection?',
+        description: 'This satellite estimate is a starting point. A professional inspection will assess shingles, flashing, ventilation, and decking condition.',
+        buttonText: 'Request a Free On-Site Inspection',
+        buttonIcon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        ),
+        footerText: 'We\'ll follow up within 2 business days to confirm availability.',
+      };
+    } else if (inBucks && !schedulingLive) {
+      // Variant 2: In Bucks County BUT scheduling not live yet
+      return {
+        title: 'Want an On-Site Inspection?',
+        description: 'We\'re launching on-site inspections in Bucks County soon. Be the first to know when scheduling opens.',
+        buttonText: 'Get Notified When Inspections Launch',
+        buttonIcon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+        ),
+        footerText: 'No spam. We\'ll only email when scheduling is available in your area.',
+      };
+    } else {
+      // Variant 3: Outside Bucks County
+      return {
+        title: 'On-Site Inspections Coming Soon',
+        description: 'We\'re launching scheduling in Bucks County, PA first and expanding across Pennsylvania. Join the waitlist and we\'ll email you when scheduling is available in your area.',
+        buttonText: 'Join the Waitlist',
+        buttonIcon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+        ),
+        footerText: 'No spam—only an email when scheduling is available in your area.',
+      };
+    }
+  };
+
+  const ctaContent = getCTAContent();
 
   return (
     <div className="space-y-8">
@@ -65,7 +186,6 @@ export default function ReportFull({ report }: ReportFullProps) {
       <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white">
         {showConfetti && (
           <div className="absolute inset-0 pointer-events-none">
-            {/* Simple confetti effect */}
             {[...Array(20)].map((_, i) => (
               <div
                 key={i}
@@ -88,9 +208,9 @@ export default function ReportFull({ report }: ReportFullProps) {
             </svg>
           </div>
           <div>
-            <h2 className="text-xl font-bold">Report Unlocked!</h2>
+            <h2 className="text-xl font-bold">Your Roof Report Is Ready</h2>
             <p className="text-emerald-100">
-              Your full roof analysis is ready. {partnerName} will be in touch soon.
+              A satellite-based estimate to help you plan ahead and compare quotes.
             </p>
           </div>
         </div>
@@ -98,30 +218,53 @@ export default function ReportFull({ report }: ReportFullProps) {
 
       {/* Header */}
       <div className="text-center">
-        <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-800 px-4 py-2 rounded-full text-sm font-medium mb-4">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          Preliminary Estimate — On-site inspection recommended
-        </div>
         <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-          Satellite Roof Analysis
+          Satellite-based Roof Estimate
         </h1>
         <p className="text-lg text-slate-600">{report.fullAddress}</p>
       </div>
 
+      {/* Data Confidence Block */}
+      <div className={`rounded-xl p-4 ${confidenceInfo.bgColor} border ${
+        confidenceInfo.color === 'text-emerald-600' ? 'border-emerald-200' : 'border-amber-200'
+      }`}>
+        <div className="flex items-start gap-3">
+          <div className={`flex-shrink-0 ${confidenceInfo.color}`}>
+            {report.confidenceScore === 'high' ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+          </div>
+          <div>
+            <p className={`font-semibold ${confidenceInfo.color}`}>
+              {confidenceInfo.label}
+            </p>
+            {confidenceInfo.detail && (
+              <p className="text-sm text-slate-600 mt-1">
+                {confidenceInfo.detail}
+              </p>
+            )}
+            {report.imageryDate && (
+              <p className="text-xs text-slate-500 mt-2">
+                Imagery date: {report.imageryDate}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Satellite Image */}
       {report.staticMapUrl && (
-        <div>
-          <SatelliteImage
-            src={report.staticMapUrl}
-            alt={`Satellite view of ${report.fullAddress}`}
-            address={report.addressLine1}
-          />
-          <p className="text-center text-sm text-slate-500 mt-2">
-            Satellite view of your property. Measurements estimated from aerial data.
-          </p>
-        </div>
+        <SatelliteImage
+          src={report.staticMapUrl}
+          alt={`Satellite view of ${report.fullAddress}`}
+          address={report.addressLine1}
+        />
       )}
 
       {/* Roof Section Breakdown */}
@@ -138,7 +281,7 @@ export default function ReportFull({ report }: ReportFullProps) {
       {hasMetrics && (
         <section>
           <h2 className="text-2xl font-bold text-slate-900 mb-4">
-            Roof Size & Geometry
+            Roof Size &amp; Geometry
           </h2>
 
           <div className="grid md:grid-cols-3 gap-4 mb-6">
@@ -171,7 +314,7 @@ export default function ReportFull({ report }: ReportFullProps) {
                 {formatSquares(report.roofSquaresLow!, report.roofSquaresHigh!)}
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                Contractors price by the &quot;square&quot; (100 sq ft). Knowing your squares helps you compare quotes.
+                1 square = 100 sq ft. Roofers price by the square.
               </p>
             </div>
 
@@ -214,7 +357,6 @@ export default function ReportFull({ report }: ReportFullProps) {
           />
         </section>
       )}
-
 
       {/* Roof Insights */}
       {insights.length > 0 && (
@@ -274,12 +416,12 @@ export default function ReportFull({ report }: ReportFullProps) {
       {/* Questions to Ask */}
       <section>
         <h2 className="text-2xl font-bold text-slate-900 mb-4">
-          Questions to Ask Your Roofer
+          Next Steps: Compare Quotes
         </h2>
+        <p className="text-slate-600 mb-4">
+          When speaking with roofers, ask these questions:
+        </p>
         <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-          <p className="text-slate-600 mb-4">
-            Before signing a contract, ask these questions:
-          </p>
           <ul className="space-y-3">
             {questions.map((question, index) => (
               <li key={index} className="flex items-start gap-3">
@@ -293,14 +435,13 @@ export default function ReportFull({ report }: ReportFullProps) {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* CTA - Conditional based on location and scheduling status */}
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 text-center">
         <h2 className="text-2xl font-bold text-white mb-2">
-          Ready for an Accurate Quote?
+          {ctaContent.title}
         </h2>
         <p className="text-slate-300 mb-6 max-w-xl mx-auto">
-          This satellite estimate is a starting point. For a real assessment of your
-          shingles, flashing, and decking, schedule a free on-site inspection.
+          {ctaContent.description}
         </p>
 
         {!showContactForm ? (
@@ -310,10 +451,8 @@ export default function ReportFull({ report }: ReportFullProps) {
                        text-white font-semibold px-8 py-4 rounded-xl shadow-lg
                        shadow-emerald-500/25 transition-all"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            Schedule My Free Inspection
+            {ctaContent.buttonIcon}
+            {ctaContent.buttonText}
           </button>
         ) : (
           <div className="max-w-md mx-auto">
@@ -326,15 +465,18 @@ export default function ReportFull({ report }: ReportFullProps) {
             />
           </div>
         )}
+        <p className="text-slate-400 text-sm mt-4">
+          {ctaContent.footerText}
+        </p>
       </section>
 
       {/* Footer Disclaimer */}
       <div className="text-center text-sm text-slate-500 max-w-2xl mx-auto">
         <p>
-          This report is a satellite-based preliminary assessment and does not
-          constitute a professional inspection, warranty, or binding quote.
-          Actual roof condition, pricing, and scope can only be determined
-          through on-site evaluation.
+          This report is a satellite-based preliminary estimate. It is not a professional
+          inspection, structural assessment, warranty, or binding quote. Roof condition,
+          pricing, and scope of work can only be confirmed through on-site evaluation.
+          RoofCheck does not perform inspections or roofing work.
         </p>
       </div>
     </div>

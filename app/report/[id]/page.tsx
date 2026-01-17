@@ -69,6 +69,16 @@ export default function ReportPage() {
         leadEmail: data.leadEmail,
         leadPhone: data.leadPhone,
         leadCapturedAt: data.leadCapturedAt,
+        // Phase 2 fields
+        wantsContractorContact: data.wantsContractorContact || false,
+        leadTimeline: data.leadTimeline,
+        leadIssueType: data.leadIssueType,
+        phoneConsent: data.phoneConsent || false,
+        phoneConsentAt: data.phoneConsentAt,
+        marketingConsent: data.marketingConsent || false,
+        // Confidence/quality
+        confidenceScore: data.confidenceScore,
+        imageryDate: data.imageryDate,
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
       };

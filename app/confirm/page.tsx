@@ -1,8 +1,20 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Suspense } from 'react';
+import { Suspense, useCallback } from 'react';
 import MapConfirmation from '@/components/MapConfirmation';
+
+// Generate a unique session ID for idempotency
+function getOrCreateSessionId(): string {
+  if (typeof window === 'undefined') return '';
+
+  let sessionId = sessionStorage.getItem('roofcheck_session_id');
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    sessionStorage.setItem('roofcheck_session_id', sessionId);
+  }
+  return sessionId;
+}
 
 function ConfirmPageContent() {
   const router = useRouter();
@@ -17,6 +29,57 @@ function ConfirmPageContent() {
   const state = searchParams.get('state') || '';
   const postalCode = searchParams.get('postalCode') || '';
   const accessCode = searchParams.get('code') || '';
+
+  // Start background report generation and navigate (must be before early return)
+  const handleConfirm = useCallback(async (confirmedLat: number, confirmedLng: number) => {
+    const sessionId = getOrCreateSessionId();
+
+    // Check for existing report ID in session storage
+    const existingReportId = sessionStorage.getItem('roofcheck_report_id');
+
+    // Start background report generation (fire and forget)
+    fetch('/api/start-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lat: confirmedLat,
+        lng: confirmedLng,
+        fullAddress: address,
+        addressLine1,
+        city,
+        state,
+        postalCode,
+        sessionId,
+        reportId: existingReportId || undefined,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.reportId) {
+          sessionStorage.setItem('roofcheck_report_id', data.reportId);
+        }
+      })
+      .catch((err) => {
+        console.error('Background report generation failed:', err);
+      });
+
+    // Build params for analyzing page
+    const params = new URLSearchParams({
+      lat: confirmedLat.toString(),
+      lng: confirmedLng.toString(),
+      address,
+      addressLine1,
+      city,
+      state,
+      postalCode,
+    });
+
+    if (accessCode) {
+      params.set('code', accessCode);
+    }
+
+    router.push(`/analyzing?${params.toString()}`);
+  }, [address, addressLine1, city, state, postalCode, accessCode, router]);
 
   // Validate we have required data
   if (!lat || !lng || !address) {
@@ -68,25 +131,6 @@ function ConfirmPageContent() {
       </div>
     );
   }
-
-  const handleConfirm = (confirmedLat: number, confirmedLng: number) => {
-    // Build params for analyzing page
-    const params = new URLSearchParams({
-      lat: confirmedLat.toString(),
-      lng: confirmedLng.toString(),
-      address,
-      addressLine1,
-      city,
-      state,
-      postalCode,
-    });
-
-    if (accessCode) {
-      params.set('code', accessCode);
-    }
-
-    router.push(`/analyzing?${params.toString()}`);
-  };
 
   return (
     <div className="py-8 px-4">

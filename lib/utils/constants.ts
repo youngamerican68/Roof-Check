@@ -42,17 +42,17 @@ export const MATERIAL_TIERS = {
   economy: {
     name: 'Economy',
     material: '3-Tab Shingles',
-    description: 'Basic protection, 15-20 year lifespan',
+    description: 'Basic protection, 15–20 year typical lifespan',
   },
   standard: {
     name: 'Standard',
     material: 'Architectural Shingles',
-    description: 'Enhanced durability, 25-30 year lifespan',
+    description: 'Enhanced durability, 25–30 year typical lifespan',
   },
   premium: {
     name: 'Premium',
     material: 'Designer/Metal',
-    description: 'Superior protection, 40-50+ year lifespan',
+    description: 'Superior protection, 40–50+ year typical lifespan',
   },
 } as const;
 
@@ -69,5 +69,5 @@ export const ROOFER_QUESTIONS = [
   'Does your quote include tear-off of existing layers and disposal?',
   'Will you install ice-and-water shield in valleys and along eaves?',
   'What warranty do you offer on labor vs. materials?',
-  'Can I see your proof of insurance and contractor\'s license?',
+  'Can I see proof of insurance and contractor license/registration?',
 ] as const;

@@ -44,6 +44,16 @@ export const roofReports = pgTable('roof_reports', {
   leadPhone: text('lead_phone'),
   leadCapturedAt: timestamp('lead_captured_at', { withTimezone: true }),
 
+  // Lead qualification (Phase 2)
+  wantsContractorContact: boolean('wants_contractor_contact').default(false),
+  leadTimeline: text('lead_timeline'), // 'within_7_days', 'within_30_days', '1_3_months', '3_6_months', 'just_researching'
+  leadIssueType: text('lead_issue_type'), // 'storm_damage', 'age_wear', 'leak', 'getting_quotes', 'other'
+
+  // Consent fields (Phase 2)
+  phoneConsent: boolean('phone_consent').default(false),
+  phoneConsentAt: timestamp('phone_consent_at', { withTimezone: true }),
+  marketingConsent: boolean('marketing_consent').default(false),
+
   // Timestamps
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

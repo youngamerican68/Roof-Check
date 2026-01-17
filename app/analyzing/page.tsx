@@ -21,7 +21,7 @@ function AnalyzingPageContent() {
   const postalCode = searchParams.get('postalCode') || '';
   const accessCode = searchParams.get('code') || '';
 
-  // Call analyze API
+  // Call analyze API - first check for background-generated report
   const analyzeRoof = useCallback(async () => {
     if (!lat || !lng || !fullAddress) {
       setError('Missing location data');
@@ -29,7 +29,37 @@ function AnalyzingPageContent() {
     }
 
     try {
-      const response = await fetch('/api/analyze', {
+      // Check for existing report from background generation
+      const existingReportId = typeof window !== 'undefined'
+        ? sessionStorage.getItem('roofcheck_report_id')
+        : null;
+
+      if (existingReportId) {
+        // Verify the report exists and is complete
+        const statusResponse = await fetch(`/api/start-report?reportId=${existingReportId}`);
+        const statusData = await statusResponse.json();
+
+        if (statusData.success && statusData.isComplete) {
+          setReportId(existingReportId);
+          setIsApiReady(true);
+          return;
+        }
+      }
+
+      // Get session ID for idempotency
+      let sessionId = typeof window !== 'undefined'
+        ? sessionStorage.getItem('roofcheck_session_id')
+        : null;
+
+      if (!sessionId) {
+        sessionId = crypto.randomUUID();
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('roofcheck_session_id', sessionId);
+        }
+      }
+
+      // Fall back to starting report generation (or complete background one)
+      const response = await fetch('/api/start-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -40,7 +70,8 @@ function AnalyzingPageContent() {
           city,
           state,
           postalCode,
-          accessCode: accessCode || undefined,
+          sessionId,
+          reportId: existingReportId || undefined,
         }),
       });
 
@@ -50,12 +81,17 @@ function AnalyzingPageContent() {
         throw new Error(data.error || 'Analysis failed');
       }
 
+      // Store report ID for back/forward navigation
+      if (typeof window !== 'undefined' && data.reportId) {
+        sessionStorage.setItem('roofcheck_report_id', data.reportId);
+      }
+
       setReportId(data.reportId);
       setIsApiReady(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     }
-  }, [lat, lng, fullAddress, addressLine1, city, state, postalCode, accessCode]);
+  }, [lat, lng, fullAddress, addressLine1, city, state, postalCode]);
 
   useEffect(() => {
     analyzeRoof();

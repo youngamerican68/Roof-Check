@@ -1,22 +1,56 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import type { RoofReport } from '@/types';
 import SatelliteImage from './SatelliteImage';
 import CostEstimateDisplay from './CostEstimateDisplay';
 import LeadCaptureForm from './LeadCaptureForm';
+import StickyCTA from './StickyCTA';
 import {
   formatArea,
   formatSquares,
 } from '@/lib/utils/formatters';
 import { getComplexityDescription } from '@/lib/services/roofAnalysis';
+import { trackAddressConfirmed } from '@/lib/utils/analytics';
 
 interface ReportPreviewProps {
   report: RoofReport;
   onLeadCaptured: () => void;
 }
 
+// Confidence messaging (Phase 1.4)
+function getConfidenceMessage(score: string | null): { text: string; color: string; detail?: string } {
+  switch (score) {
+    case 'high':
+      return { text: 'Clear aerial roof edges', color: 'text-emerald-600' };
+    case 'medium':
+      return { text: 'Some edges obscured', color: 'text-amber-600' };
+    case 'low':
+    default:
+      return {
+        text: 'Data confidence: Limited',
+        color: 'text-amber-600',
+        detail: 'Roof area range estimated using your home footprint and typical roof-to-home ratios. A roofer\'s on-site measurement recommended for exact figures.'
+      };
+  }
+}
+
 export default function ReportPreview({ report, onLeadCaptured }: ReportPreviewProps) {
+  const [showMethodology, setShowMethodology] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
+
   const hasMetrics = report.roofSquaresLow && report.roofSquaresHigh;
+  const confidenceInfo = getConfidenceMessage(report.confidenceScore);
+
+  // Scroll to form when CTA clicked
+  const scrollToForm = () => {
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Track address confirmed event
+  useEffect(() => {
+    trackAddressConfirmed(report.id);
+  }, [report.id]);
 
   return (
     <div className="space-y-8">
@@ -31,10 +65,10 @@ export default function ReportPreview({ report, onLeadCaptured }: ReportPreviewP
               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          Preliminary Estimate — On-site inspection recommended
+          Preliminary Estimate — On-site measurement recommended
         </div>
         <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-          Satellite Roof Analysis
+          Satellite-based Roof Estimate
         </h1>
         <p className="text-lg text-slate-600">{report.fullAddress}</p>
       </div>
@@ -47,6 +81,34 @@ export default function ReportPreview({ report, onLeadCaptured }: ReportPreviewP
           address={report.addressLine1}
         />
       )}
+
+      {/* Confidence Indicator (Phase 1.4) */}
+      <div className="text-center">
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <div className={`flex items-center gap-1.5 ${confidenceInfo.color}`}>
+            {report.confidenceScore === 'high' ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            <span className="font-medium">{confidenceInfo.text}</span>
+          </div>
+          {report.imageryDate && (
+            <span className="text-slate-400">
+              · Imagery: {report.imageryDate}
+            </span>
+          )}
+        </div>
+        {confidenceInfo.detail && (
+          <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+            {confidenceInfo.detail}
+          </p>
+        )}
+      </div>
 
       {/* Key Metrics Preview */}
       {hasMetrics && (
@@ -99,6 +161,26 @@ export default function ReportPreview({ report, onLeadCaptured }: ReportPreviewP
         </div>
       )}
 
+      {/* Earlier CTA after roof area section (Phase 1.3) */}
+      <div className="text-center">
+        <button
+          onClick={scrollToForm}
+          className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600
+                     text-white font-semibold px-6 py-3 rounded-xl shadow-lg
+                     shadow-emerald-500/25 transition-all"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+            />
+          </svg>
+          Email My Full Report
+        </button>
+      </div>
+
       {/* Cost Estimate Teaser */}
       {report.costStandardLow && report.costStandardHigh && (
         <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-6 border border-emerald-200">
@@ -123,6 +205,48 @@ export default function ReportPreview({ report, onLeadCaptured }: ReportPreviewP
           </div>
         </div>
       )}
+
+      {/* Methodology Toggle (Phase 3.1) */}
+      <div className="border border-slate-200 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setShowMethodology(!showMethodology)}
+          className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors"
+        >
+          <span className="text-sm font-medium text-slate-700">How we calculate this</span>
+          <svg
+            className={`w-5 h-5 text-slate-500 transition-transform ${showMethodology ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showMethodology && (
+          <div className="p-4 bg-white border-t border-slate-200">
+            <ul className="space-y-2 text-sm text-slate-600">
+              <li className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                High-resolution aerial imagery
+              </li>
+              <li className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Square footage calculated from roof geometry
+              </li>
+              <li className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Cost ranges based on recent national averages, adjusted by region when available
+              </li>
+            </ul>
+          </div>
+        )}
+      </div>
 
       {/* Locked Content Preview */}
       <div className="space-y-6">
@@ -192,12 +316,18 @@ export default function ReportPreview({ report, onLeadCaptured }: ReportPreviewP
       </div>
 
       {/* Lead Capture Form */}
-      <div className="mt-8">
+      <div ref={formRef} className="mt-8 scroll-mt-4">
         <LeadCaptureForm
           reportId={report.id}
           onSuccess={onLeadCaptured}
         />
       </div>
+
+      {/* Sticky CTA for Mobile (Phase 1.3) */}
+      <StickyCTA onClick={scrollToForm} />
+
+      {/* Bottom padding for sticky button on mobile */}
+      <div className="h-20 md:hidden" />
     </div>
   );
 }

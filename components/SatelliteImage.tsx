@@ -59,19 +59,12 @@ export default function SatelliteImage({ src, alt, address }: SatelliteImageProp
         }}
       />
 
-      {/* Address overlay */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-red-500 rounded-full shadow-lg" />
-          <span className="text-white text-sm font-medium">{address}</span>
+      {/* Location pin indicator */}
+      <div className="absolute bottom-3 left-3">
+        <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-full">
+          <div className="w-2 h-2 bg-red-500 rounded-full" />
+          <span className="text-white text-xs font-medium">Satellite View</span>
         </div>
-      </div>
-
-      {/* "Your Home" label */}
-      <div className="absolute top-3 right-3">
-        <span className="bg-white/90 backdrop-blur-sm text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-full shadow">
-          Your Home
-        </span>
       </div>
     </div>
   );

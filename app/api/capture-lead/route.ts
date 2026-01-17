@@ -8,15 +8,21 @@ import type { CaptureLeadResponse } from '@/types';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Request validation schema
+// Request validation schema - updated for Phase 2
 const captureLeadSchema = z.object({
   reportId: z.string().uuid(),
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email address'),
-  phone: z.string().min(10, 'Invalid phone number'),
+  phone: z.string().nullable().optional(),
   consentGiven: z.boolean().refine(val => val === true, {
-    message: 'You must agree to be contacted',
+    message: 'Consent is required',
   }),
+  // Phase 2 fields
+  wantsContractorContact: z.boolean().optional().default(false),
+  leadTimeline: z.string().nullable().optional(),
+  leadIssueType: z.string().nullable().optional(),
+  phoneConsent: z.boolean().optional().default(false),
+  marketingConsent: z.boolean().optional().default(false),
 });
 
 export async function POST(request: NextRequest): Promise<NextResponse<CaptureLeadResponse>> {
@@ -25,7 +31,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<CaptureLe
     const body = await request.json();
     const validatedData = captureLeadSchema.parse(body);
 
-    const { reportId, name, email, phone } = validatedData;
+    const {
+      reportId,
+      name,
+      email,
+      phone,
+      wantsContractorContact,
+      leadTimeline,
+      leadIssueType,
+      phoneConsent,
+      marketingConsent,
+    } = validatedData;
 
     // Check if report exists
     const [existingReport] = await db
@@ -47,15 +63,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<CaptureLe
     }
 
     // Update report with lead information
+    const now = new Date();
     await db
       .update(roofReports)
       .set({
         leadCaptured: true,
         leadName: name.trim(),
         leadEmail: email.toLowerCase().trim(),
-        leadPhone: phone.replace(/\D/g, ''), // Store just digits
-        leadCapturedAt: new Date(),
-        updatedAt: new Date(),
+        leadPhone: phone ? phone.replace(/\D/g, '') : null, // Store just digits
+        leadCapturedAt: now,
+        // Phase 2 fields
+        wantsContractorContact: wantsContractorContact || false,
+        leadTimeline: leadTimeline || null,
+        leadIssueType: leadIssueType || null,
+        phoneConsent: phoneConsent || false,
+        phoneConsentAt: phoneConsent ? now : null,
+        marketingConsent: marketingConsent || false,
+        updatedAt: now,
       })
       .where(eq(roofReports.id, reportId));
 

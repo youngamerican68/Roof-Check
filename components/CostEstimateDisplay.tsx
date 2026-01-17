@@ -89,9 +89,9 @@ export default function CostEstimateDisplay({
             />
           </svg>
           <p className="text-sm text-amber-800">
-            Estimates based on roof size and 2024/2025 national averages. Actual cost
-            depends on existing layers, decking condition, local labor rates, pitch,
-            and access. Use as a starting point.
+            Estimates based on roof size and 2024–2025 national averages. Actual cost
+            depends on existing layers, decking condition, local labor rates, roof pitch,
+            and site access. Use these figures as a starting point when comparing quotes.
           </p>
         </div>
       </div>

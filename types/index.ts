@@ -161,6 +161,20 @@ export interface RoofReport {
   leadPhone: string | null;
   leadCapturedAt: string | null;
 
+  // Lead qualification (Phase 2)
+  wantsContractorContact: boolean;
+  leadTimeline: string | null;
+  leadIssueType: string | null;
+
+  // Consent fields (Phase 2)
+  phoneConsent: boolean;
+  phoneConsentAt: string | null;
+  marketingConsent: boolean;
+
+  // Confidence/quality
+  confidenceScore: ConfidenceScore | null;
+  imageryDate: string | null;
+
   // Timestamps
   createdAt: string;
   updatedAt: string;
@@ -193,6 +207,12 @@ export interface CaptureLeadRequest {
   email: string;
   phone: string;
   consentGiven: boolean;
+  // Phase 2 fields
+  wantsContractorContact?: boolean;
+  leadTimeline?: string;
+  leadIssueType?: string;
+  phoneConsent?: boolean;
+  marketingConsent?: boolean;
 }
 
 export interface CaptureLeadResponse {
